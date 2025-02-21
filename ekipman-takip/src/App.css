@@ -1,0 +1,12 @@
+/* src/App.css */
+.App {
+  text-align: center;
+}
+
+h1 {
+  color: #61dafb;  /* React logosunun rengini hatırlatan renk */
+}
+
+p {
+  font-size: 18px;
+}
