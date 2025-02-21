@@ -7,6 +7,7 @@ import UsageHistory from "./pages/UsageHistory";
 import AddUser from "./pages/AddUser";
 import AddEquipment from "./pages/AddEquipment";
 
+//git test
 function App() {
   return (
     <Router>
