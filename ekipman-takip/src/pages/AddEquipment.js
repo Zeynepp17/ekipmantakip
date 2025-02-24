@@ -1,84 +1,104 @@
-import React, { useState } from "react";
-import axios from "axios";
-
-const API_URL = "http://127.0.0.1:5000/api/equipment";
+import React, { useState, useEffect } from "react";
 
 const AddEquipment = () => {
-  const [equipment, setEquipment] = useState({
-    name: "",
-    category_id: "",
-    status: "available", // Varsayılan olarak "müsait"
-    department_id: "",
-  });
+  const [name, setName] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState(""); // Kategori ID
+  const [status, setStatus] = useState("available");
+  const [department, setDepartment] = useState("");
+  const [categories, setCategories] = useState([]);
 
-  const [error, setError] = useState(null);
+  useEffect(() => {
+    fetchCategories();
+  }, []);
 
-  const handleChange = (e) => {
-    setEquipment({ ...equipment, [e.target.name]: e.target.value });
+  // ✅ Kategorileri getir
+  const fetchCategories = async () => {
+    try {
+      const response = await fetch("http://127.0.0.1:5000/api/equipment_categories");
+
+      if (!response.ok) {
+        throw new Error("Kategoriler yüklenemedi!");
+      }
+
+      const data = await response.json();
+      setCategories(data);
+    } catch (error) {
+      console.error("Kategorileri yüklerken hata oluştu:", error);
+    }
   };
 
+  // ✅ Yeni ekipman ekleme işlemi
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    const requestData = {
+      name,
+      category_id: Number(selectedCategory), // Backend kategori_id bekliyor olabilir
+      status,
+      department: Number(department)
+    };
+
+    console.log("Gönderilen Veri:", requestData); // Konsolda kontrol et
+
     try {
-      const response = await axios.post(
-        `${API_URL}/`,  //  Sonuna "/" ekledik
-        equipment,
-        {
-          headers: { "Content-Type": "application/json" }
-        }
-      );
+      const response = await fetch("http://127.0.0.1:5000/api/equipment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestData),
+      });
+
+      if (!response.ok) {
+        throw new Error("Ekipman eklenemedi!");
+      }
 
       alert("Ekipman başarıyla eklendi!");
-      setEquipment({ name: "", category_id: "", status: "available", department_id: "" });
-    } catch (err) {
-      if (err.response && err.response.status === 409) {
-        alert("Bu isimde bir ekipman zaten mevcut!");
-      } else {
-        setError("Ekleme işlemi başarısız!");
-      }
+    } catch (error) {
+      console.error("Ekipman ekleme hatası:", error);
     }
   };
 
   return (
-    <div className="p-6">
-      <h2 className="text-2xl font-bold mb-4">Ekipman Ekle</h2>
-
-      <form onSubmit={handleSubmit} className="flex flex-col gap-2">
-        <input
-          type="text"
-          name="name"
-          placeholder="Ekipman Adı"
-          value={equipment.name}
-          onChange={handleChange}
-          className="border p-2"
-          required
-        />
-        <input
-          type="number"
-          name="category_id"
-          placeholder="Kategori ID"
-          value={equipment.category_id}
-          onChange={handleChange}
-          className="border p-2"
-          required
-        />
-        <select name="status" value={equipment.status} onChange={handleChange} className="border p-2">
-          <option value="available">Müsait</option>
-          <option value="in-use">Kullanımda</option>
-        </select>
-        <input
-          type="number"
-          name="department_id"
-          placeholder="Departman ID"
-          value={equipment.department_id}
-          onChange={handleChange}
-          className="border p-2"
-          required
-        />
-        <button type="submit" className="bg-green-500 text-white px-4 py-2">Ekle</button>
+    <div>
+      <h2>Yeni Ekipman Ekle</h2>
+      <form onSubmit={handleSubmit}>
+        <div>
+          <label>Ekipman Adı:</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
+        </div>
+        <div>
+          <label>Kategori:</label>
+          <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)}>
+            <option value="">Kategori Seçin</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>{c.category_name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label>Durum:</label>
+          <select value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="available">Müsait</option>
+            <option value="in_use">Kullanımda</option>
+          </select>
+        </div>
+        <div>
+          <label>Departman ID:</label>
+          <input
+            type="text"
+            value={department}
+            onChange={(e) => setDepartment(e.target.value)}
+            required
+          />
+        </div>
+        <button type="submit">Ekle</button>
       </form>
-
-      {error && <p className="text-red-500">{error}</p>}
     </div>
   );
 };

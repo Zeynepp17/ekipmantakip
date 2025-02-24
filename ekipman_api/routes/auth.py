@@ -65,7 +65,7 @@ def login():
         return jsonify({"error": f"Beklenmeyen hata: {str(e)}"}), 500
 
 
-# ✅ Kullanıcı Kaydı (POST /api/auth/signup)
+
 @auth_routes.route('/signup', methods=['POST'])
 def signup():
     try:
@@ -73,38 +73,39 @@ def signup():
         username = data.get("username")
         email = data.get("email")
         password = data.get("password")
+        role_id = data.get("role_id")  # Yeni eklenen rol alanı
         
-        # 🔐 Şifreyi hash'le
+        if not username or not email or not password or not role_id:
+            return jsonify({"error": "Eksik veri! Kullanıcı adı, e-posta, şifre ve rol gereklidir."}), 400
+
+        # Şifreyi hash'le
         password_hash = generate_password_hash(password)
-        print(f"Hash'lenmiş şifre: {password_hash}")  # Debug için ekleyin
 
-        # 🔍 Veritabanına bağlan
         with get_db_connection() as conn:
-            cursor = conn.cursor(pymysql.cursors.DictCursor)
+            cursor = conn.cursor()
 
-            # 🔍 Kullanıcıyı veritabanında ara (aynı kullanıcı adıyla başka bir kullanıcı varsa)
-            cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
-            existing_user = cursor.fetchone()
-
-            if existing_user:
-                return jsonify({"error": "Bu kullanıcı adı zaten alınmış!"}), 400
-
-            # ✅ Yeni kullanıcıyı ekle
+            # Kullanıcı ekleme
             cursor.execute("INSERT INTO users (username, email, password_hash) VALUES (%s, %s, %s)",
                            (username, email, password_hash))
+            user_id = cursor.lastrowid  # Yeni eklenen kullanıcının ID'sini al
+
+            # Kullanıcıya rol ekleme
+            cursor.execute("INSERT INTO user_roles (user_id, role_id) VALUES (%s, %s)", (user_id, role_id))
+            
             conn.commit()
 
-        return jsonify({"message": "Kullanıcı başarıyla kaydedildi"}), 201
+        return jsonify({"message": "Kullanıcı başarıyla eklendi!"}), 201
 
     except Exception as e:
-        print("HATA OLUŞTU:", e)
-        traceback.print_exc()
+        print("HATA:", e)
         return jsonify({"error": str(e)}), 500
+
 
 @auth_routes.route('/users', methods=['GET'])
 @jwt_required()
 def get_all_users():
     try:
+        
         current_user_id = get_jwt_identity()
         claims = get_jwt()
 
@@ -124,11 +125,11 @@ def get_all_users():
             """)
             users = cursor.fetchall()
              
-            print(f"Veritabanında Gelen Kullanıcılar: {users}")
 
         return jsonify(users), 200
 
     except Exception as e:
+        print("HATA:", e)
         traceback.print_exc()
         return jsonify({"error": f"Beklenmeyen hata: {str(e)}"}), 500
     
@@ -162,6 +163,83 @@ def delete_user(user_id):
     except Exception as e:
         print("HATA:", e)
         return jsonify({"error": "Kullanıcı silinirken hata oluştu!"}), 500
+
+@auth_routes.route('/users/<int:user_id>', methods=['GET'])
+@jwt_required()
+def get_user(user_id):
+    try:
+        current_user_id = get_jwt_identity()
+        claims = get_jwt()
+
+        print(f"📌 Token'dan Gelen Kullanıcı ID: {current_user_id}")
+        print(f"📌 Token'dan Gelen Rol: {claims.get('role_name')}")
+
+        # Yetki kontrolü
+        if claims.get("role_name") not in ["Depo Sorumlusu", "Yönetici"]:
+            return jsonify({"error": "Erişim izniniz yok!"}), 403
+
+        with get_db_connection() as conn:
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+            cursor.execute("""
+                SELECT u.id, u.username, u.email, r.role_name 
+                FROM users u
+                LEFT JOIN user_roles ur ON u.id = ur.user_id
+                LEFT JOIN roles r ON ur.role_id = r.id
+                WHERE u.id = %s
+            """, (user_id,))
+            user = cursor.fetchone()
+
+        if not user:
+            return jsonify({"error": "Kullanıcı bulunamadı!"}), 404
+
+        return jsonify(user), 200
+
+    except Exception as e:
+        print("HATA:", e)
+        traceback.print_exc()
+        return jsonify({"error": f"Beklenmeyen hata: {str(e)}"}), 500
+@auth_routes.route('/users/<int:user_id>', methods=['PUT'])
+@jwt_required()
+def update_user(user_id):
+    try:
+        data = request.json
+        username = data.get("username")
+        email = data.get("email")
+        role_name = data.get("role_name")
+
+        if not username or not email or not role_name:
+            return jsonify({"error": "Eksik veri!"}), 400
+
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE users u
+                LEFT JOIN user_roles ur ON u.id = ur.user_id
+                LEFT JOIN roles r ON ur.role_id = r.id
+                SET u.username = %s, u.email = %s, r.role_name = %s
+                WHERE u.id = %s
+            """, (username, email, role_name, user_id))
+            conn.commit()
+
+        return jsonify({"message": "Kullanıcı başarıyla güncellendi!"}), 200
+
+    except Exception as e:
+        print("HATA:", e)
+        return jsonify({"error": "Kullanıcı güncellenirken hata oluştu!"}), 500
+@auth_routes.route('/roles', methods=['GET'])
+@jwt_required()
+def get_roles():
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+            cursor.execute("SELECT id, role_name FROM roles")  # Rolleri getir
+            roles = cursor.fetchall()
+
+        return jsonify(roles), 200
+
+    except Exception as e:
+        print("HATA:", e)
+        return jsonify({"error": "Rol listesi alınamadı!"}), 500
 
 
 
